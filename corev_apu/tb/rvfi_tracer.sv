@@ -6,6 +6,8 @@
 // You may obtain a copy of the License at https://solderpad.org/licenses/
 //
 // Original Author: Jean-Roch COULON - Thales
+import "DPI-C" function longint read_symbol(input string symbol, output longint unsigned address);
+import "DPI-C" function read_elf(input string filename);
 
 module rvfi_tracer #(
   parameter logic [7:0] HART_ID      = '0,
@@ -22,13 +24,23 @@ module rvfi_tracer #(
   logic[riscv::PLEN-1:0] TOHOST_ADDR;
   int f;
   int unsigned SIM_FINISH;
+  string ELF_PATH;
   initial begin
+    int symbol_return_value;
     f = $fopen($sformatf("trace_rvfi_hart_%h.dasm", HART_ID), "w");
     if (!$value$plusargs("time_out=%d", SIM_FINISH)) SIM_FINISH = 2000000;
-    if (!$value$plusargs("tohost_addr=%h", TOHOST_ADDR)) TOHOST_ADDR = '0;
-    if (TOHOST_ADDR == '0) begin
+    if (!$value$plusargs("elf_file=%s", ELF_PATH))
+        $display("*** [rvf_tracer] WARNING: elf path not set");
+
+    // TODO: Fix two invocations of read_elf
+    read_elf(ELF_PATH);
+    symbol_return_value = read_symbol("tohost", TOHOST_ADDR);
+    if (symbol_return_value != '0) begin
       $display("*** [rvf_tracer] WARNING: No valid address of 'tohost' (tohost == 0x%h), termination possible only by timeout or Ctrl-C!\n", TOHOST_ADDR);
       $fwrite(f, "*** [rvfi_tracer] WARNING No valid address of 'tohost' (tohost == 0x%h), termination possible only by timeout or Ctrl-C!\n", TOHOST_ADDR);
+    end
+    else begin
+      $display("*** [rvf_tracer] INFO : Valid address of 'tohost' (tohost == 0x%h)", TOHOST_ADDR);
     end
   end
 

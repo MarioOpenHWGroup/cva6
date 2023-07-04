@@ -19,9 +19,11 @@
 #define SHT_PROGBITS 0x1
 #define SHT_GROUP 0x11
 
+using namespace std;
+
 // address and size
 std::vector<std::pair<reg_t, reg_t>> sections;
-std::map<std::string, uint64_t> symbols;
+std::map<string, uint64_t> symbols;
 // memory based address and content
 std::map<reg_t, std::vector<uint8_t>> mems;
 reg_t entry;
@@ -78,10 +80,7 @@ extern "C" void read_elf(const char* filename) {
     const Elf64_Ehdr* eh64 = (const Elf64_Ehdr*)buf;
     assert(IS_ELF32(*eh64) || IS_ELF64(*eh64));
 
-
-
     std::vector<uint8_t> zeros;
-    std::map<std::string, uint64_t> symbols;
 
     #define LOAD_ELF(ehdr_t, phdr_t, shdr_t, sym_t) do { \
     ehdr_t* eh = (ehdr_t*)buf; \
@@ -95,20 +94,25 @@ extern "C" void read_elf(const char* filename) {
           sections.push_back(std::make_pair(ph[i].p_paddr, ph[i].p_memsz)); \
           write(ph[i].p_paddr, ph[i].p_filesz, (uint8_t*)buf + ph[i].p_offset); \
         } \
-        zeros.resize(ph[i].p_memsz - ph[i].p_filesz); \
+        if (size_t pad = (ph[i].p_memsz) - (ph[i].p_filesz)) {       \
+            zeros.resize(ph[i].p_memsz - ph[i].p_filesz); \
+            write(ph[i].p_paddr + ph[i].p_filesz, pad, \
+                    zeros.data()); \
+        } \
       } \
     } \
     shdr_t* sh = (shdr_t*)(buf + eh->e_shoff); \
     assert(size >= eh->e_shoff + eh->e_shnum*sizeof(*sh)); \
     assert(eh->e_shstrndx < eh->e_shnum); \
-    assert(size >= sh[eh->e_shstrndx].sh_offset + sh[eh->e_shstrndx].sh_size); \
+    assert(size >= sh[eh->e_shstrndx].sh_offset +  \
+            sh[eh->e_shstrndx].sh_size); \
     char *shstrtab = buf + sh[eh->e_shstrndx].sh_offset; \
     unsigned strtabidx = 0, symtabidx = 0; \
     for (unsigned i = 0; i < eh->e_shnum; i++) { \
       unsigned max_len = sh[eh->e_shstrndx].sh_size - sh[i].sh_name; \
       if ((sh[i].sh_type & SHT_GROUP) && strcmp(shstrtab + sh[i].sh_name, ".strtab") != 0 && strcmp(shstrtab + sh[i].sh_name, ".shstrtab") != 0) \
       assert(strnlen(shstrtab + sh[i].sh_name, max_len) < max_len); \
-      if (sh[i].sh_type & SHT_PROGBITS) continue; \
+      if (sh[i].sh_type & SHT_NOBITS) continue; \
       if (strcmp(shstrtab + sh[i].sh_name, ".strtab") == 0) \
         strtabidx = i; \
       if (strcmp(shstrtab + sh[i].sh_name, ".symtab") == 0) \
@@ -121,7 +125,8 @@ extern "C" void read_elf(const char* filename) {
         unsigned max_len = sh[strtabidx].sh_size - sym[i].st_name; \
         assert(sym[i].st_name < sh[strtabidx].  sh_size); \
         assert(strnlen(strtab + sym[i].st_name, max_len) < max_len); \
-        symbols[strtab + sym[i].st_name] = sym[i].st_value; \
+        string s = (strtab + sym[i].st_name);\
+        symbols[s] = sym[i].st_value; \
       } \
     } \
     } while(0)
@@ -132,4 +137,14 @@ extern "C" void read_elf(const char* filename) {
     LOAD_ELF(Elf64_Ehdr, Elf64_Phdr, Elf64_Shdr, Elf64_Sym);
 
   munmap(buf, size);
+}
+
+
+extern "C" int64_t read_symbol(const char* symbol, uint64_t* address) {
+    auto it = symbols.find(symbol);
+    if (it != symbols.end()) {
+        *address = it->second;
+        return 0;
+    }
+    return 1;
 }
