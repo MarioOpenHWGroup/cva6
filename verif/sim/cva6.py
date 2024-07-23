@@ -522,6 +522,9 @@ def analize_result_yaml(yaml_path):
         matches_count =  instr_count - mismatches_count
         logging.info("TANDEM Result : %s with %s mismatches and %s matches"
             % (data["exit_cause"], mismatches_count, matches_count))
+        exit_cause = data["exit_cause"]
+        if (exit_cause != "SUCCESS"):
+            sys.exit(RET_FAIL)
     else:
         logging.info("TANDEM YAML not found")
 
@@ -1115,7 +1118,7 @@ def check_spike_version():
 
 
 def check_verilator_version():
-  REQUIRED_VERILATOR_VERSION = "5.008"
+  REQUIRED_VERILATOR_VERSION = "5.024"
 
   verilator_version_string = run_cmd("verilator --version")
   logging.info(f"Verilator Version: {verilator_version_string.strip()}")
